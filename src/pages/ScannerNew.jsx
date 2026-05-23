@@ -22,19 +22,15 @@ export default function ScannerNew({ user, onUserUpdate }) {
   const [recentScans, setRecentScans] = useState([])
   const [achievement, setAchievement] = useState(null)
   const [scanning, setScanning] = useState(false)
+  const [cameraError, setCameraError] = useState(null) // null | 'denied' | 'unavailable'
   const inputRef = useRef(null)
-  const scannerRef = useRef(null)
   const html5QrCodeRef = useRef(null)
   const toast = useToast()
 
   useEffect(() => {
     inputRef.current?.focus()
     loadRecentScans()
-    
-    // Cleanup scanner on unmount
-    return () => {
-      stopScanner()
-    }
+    return () => { cleanupScanner() }
   }, [])
 
   useEffect(() => {
@@ -45,6 +41,105 @@ export default function ScannerNew({ user, onUserUpdate }) {
       setShowSuggestions(false)
     }
   }, [query])
+
+  // ─── KEY FIX: Start scanner AFTER the barcode-reader div is in the DOM ───
+  useEffect(() => {
+    if (!scanning) return
+
+    // Small delay to let React flush the DOM update (renders the div first)
+    const timer = setTimeout(() => {
+      initScanner()
+    }, 80)
+
+    return () => clearTimeout(timer)
+  }, [scanning])
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const initScanner = async () => {
+    const divEl = document.getElementById('barcode-reader')
+    if (!divEl) {
+      // Div still not ready — shouldn't happen but guard anyway
+      setCameraError('unavailable')
+      setScanning(false)
+      return
+    }
+
+    // Explicitly request camera permission before handing off to the library.
+    // This triggers the native browser prompt so the user can allow it.
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+      // Got permission — stop this test stream; the library will open its own
+      stream.getTracks().forEach(t => t.stop())
+    } catch (permErr) {
+      const msg = permErr?.message?.toLowerCase() || ''
+      if (msg.includes('denied') || msg.includes('not allowed') || permErr.name === 'NotAllowedError') {
+        setCameraError('denied')
+      } else {
+        setCameraError('unavailable')
+      }
+      setScanning(false)
+      return
+    }
+
+    try {
+      const html5QrCode = new Html5Qrcode('barcode-reader')
+      html5QrCodeRef.current = html5QrCode
+
+      await html5QrCode.start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 },
+        (decodedText) => {
+          toast('Barcode detected! Searching...', 'info')
+          stopScanner()
+          setQuery(decodedText)
+          search(decodedText)
+        },
+        () => {} // per-frame errors are expected — ignore them
+      )
+    } catch (err) {
+      console.error('Scanner init error:', err)
+      const msg = err?.message?.toLowerCase() || ''
+      if (msg.includes('denied') || msg.includes('not allowed') || err.name === 'NotAllowedError') {
+        setCameraError('denied')
+      } else {
+        setCameraError('unavailable')
+      }
+      setScanning(false)
+    }
+  }
+
+  const cleanupScanner = async () => {
+    if (html5QrCodeRef.current) {
+      try {
+        const state = html5QrCodeRef.current.getState()
+        // Only stop if actually scanning (state 2 = SCANNING)
+        if (state === 2) await html5QrCodeRef.current.stop()
+        html5QrCodeRef.current.clear()
+      } catch (e) {}
+      html5QrCodeRef.current = null
+    }
+  }
+
+  const startScanner = () => {
+    setCameraError(null)
+    setResult(null)
+    setScanning(true)
+    // initScanner() will be called by the useEffect after the div renders
+  }
+
+  const stopScanner = async () => {
+    await cleanupScanner()
+    setScanning(false)
+  }
+
+  const resetScanner = () => {
+    setResult(null)
+    setQuery('')
+    setLoading(false)
+    setShowSuggestions(false)
+    setCameraError(null)
+    inputRef.current?.focus()
+  }
 
   const loadRecentScans = async () => {
     if (!user) return
@@ -66,91 +161,38 @@ export default function ScannerNew({ user, onUserUpdate }) {
         .select('name')
         .ilike('name', `%${term}%`)
         .limit(5)
-      
+
       const names = data?.map(d => d.name) || []
-      const popular = POPULAR_ITEMS.filter(p => 
+      const popular = POPULAR_ITEMS.filter(p =>
         p.toLowerCase().includes(term.toLowerCase())
       )
-      
+
       setSuggestions([...new Set([...popular, ...names])].slice(0, 5))
       setShowSuggestions(true)
     } catch (e) {
-      setSuggestions(POPULAR_ITEMS.filter(p => 
+      setSuggestions(POPULAR_ITEMS.filter(p =>
         p.toLowerCase().includes(term.toLowerCase())
       ).slice(0, 5))
       setShowSuggestions(true)
     }
   }
 
-  const startScanner = async () => {
-    try {
-      setScanning(true)
-      setResult(null)
-      
-      const html5QrCode = new Html5Qrcode("barcode-reader")
-      html5QrCodeRef.current = html5QrCode
-      
-      await html5QrCode.start(
-        { facingMode: "environment" },
-        {
-          fps: 10,
-          qrbox: { width: 250, height: 250 },
-          aspectRatio: 1.0,
-        },
-        (decodedText) => {
-          // Barcode scanned successfully
-          toast('Barcode detected! Searching...', 'info')
-          stopScanner()
-          setQuery(decodedText)
-          search(decodedText)
-        },
-        (errorMessage) => {
-          // Scanning in progress (ignore errors)
-        }
-      )
-    } catch (err) {
-      console.error('Scanner error:', err)
-      toast('Camera access denied or not available', 'error')
-      setScanning(false)
-    }
-  }
-
-  const stopScanner = async () => {
-    if (html5QrCodeRef.current) {
-      try {
-        await html5QrCodeRef.current.stop()
-        html5QrCodeRef.current.clear()
-      } catch (e) {}
-      html5QrCodeRef.current = null
-    }
-    setScanning(false)
-  }
-
-  const resetScanner = () => {
-    setResult(null)
-    setQuery('')
-    setLoading(false)
-    setShowSuggestions(false)
-    inputRef.current?.focus()
-  }
-
   const search = async (searchTerm) => {
     const term = (searchTerm || query).trim()
     if (!term) return
-    
+
     setLoading(true)
     setResult(null)
     setShowSuggestions(false)
 
     try {
-      // Search items table
       const { data: itemData } = await supabase
         .from('items')
         .select('*')
         .ilike('name', `%${term}%`)
         .limit(1)
         .single()
-      
+
       if (itemData) {
         setResult({ ...itemData, found: true })
         handleScanSuccess(itemData)
@@ -160,14 +202,13 @@ export default function ScannerNew({ user, onUserUpdate }) {
     } catch (e) {}
 
     try {
-      // Search products table
       const { data: prodData } = await supabase
         .from('products')
         .select('*')
         .or(`product_name.ilike.%${term}%,barcode.eq.${term}`)
         .limit(1)
         .single()
-      
+
       if (prodData) {
         const item = {
           name: prodData.product_name,
@@ -186,12 +227,11 @@ export default function ScannerNew({ user, onUserUpdate }) {
       }
     } catch (e) {}
 
-    // Search local DEMO_ITEMS as fallback
-    const demoItem = DEMO_ITEMS.find(item => 
+    const demoItem = DEMO_ITEMS.find(item =>
       item.name.toLowerCase().includes(term.toLowerCase()) ||
       item.barcode === term
     )
-    
+
     if (demoItem) {
       const item = {
         name: demoItem.name,
@@ -231,17 +271,15 @@ export default function ScannerNew({ user, onUserUpdate }) {
       co2: oldStats.co2 + (item.co2_saved || 0.1),
     }
 
-    // Check for new achievements
     const unlockedIds = JSON.parse(localStorage.getItem('unlocked_achievements') || '[]')
     const newAchievements = checkNewAchievements(oldStats, newStats, unlockedIds)
-    
+
     if (newAchievements.length > 0) {
       const newIds = [...unlockedIds, ...newAchievements.map(a => a.id)]
       localStorage.setItem('unlocked_achievements', JSON.stringify(newIds))
       setAchievement(newAchievements[0])
     }
 
-    // Update user
     const updated = {
       ...user,
       items_scanned: newStats.scans,
@@ -250,7 +288,6 @@ export default function ScannerNew({ user, onUserUpdate }) {
     }
     onUserUpdate(updated)
 
-    // Save to database
     if (supabase) {
       supabase.from('scans').insert({
         username: user.username,
@@ -372,8 +409,55 @@ export default function ScannerNew({ user, onUserUpdate }) {
         )}
       </div>
 
+      {/* Camera denied error */}
+      {cameraError === 'denied' && (
+        <div style={{
+          background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)',
+          borderRadius: 14, padding: '16px 18px', marginBottom: 16,
+          display: 'flex', gap: 12, alignItems: 'flex-start',
+        }}>
+          <AlertTriangle size={20} color="#f59e0b" style={{ flexShrink: 0, marginTop: 1 }} />
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: '#f59e0b', marginBottom: 4 }}>Camera access was denied</div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6 }}>
+              To fix this: tap the <strong>lock icon</strong> in your browser address bar → <strong>Site settings</strong> → <strong>Camera</strong> → set to <strong>Allow</strong>. Then tap the button below to try again.
+            </div>
+            <button onClick={startScanner} style={{
+              marginTop: 10, background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.4)',
+              borderRadius: 8, padding: '7px 14px', color: '#f59e0b', fontSize: 12,
+              fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)',
+            }}>
+              Try Again
+            </button>
+          </div>
+        </div>
+      )}
+
+      {cameraError === 'unavailable' && (
+        <div style={{
+          background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)',
+          borderRadius: 14, padding: '16px 18px', marginBottom: 16,
+          display: 'flex', gap: 12, alignItems: 'flex-start',
+        }}>
+          <XCircle size={20} color="#ef4444" style={{ flexShrink: 0, marginTop: 1 }} />
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: '#ef4444', marginBottom: 4 }}>Camera not available</div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6 }}>
+              Your device camera could not be accessed. Make sure no other app is using it, then try again. You can still search by typing above.
+            </div>
+            <button onClick={startScanner} style={{
+              marginTop: 10, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+              borderRadius: 8, padding: '7px 14px', color: '#ef4444', fontSize: 12,
+              fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)',
+            }}>
+              Try Again
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Barcode Scanner Button */}
-      {!scanning && !result && (
+      {!scanning && !result && !cameraError && (
         <button onClick={startScanner} style={{
           width: '100%',
           background: 'var(--surface)',
@@ -410,7 +494,7 @@ export default function ScannerNew({ user, onUserUpdate }) {
         </button>
       )}
 
-      {/* Camera Scanner View */}
+      {/* Camera Scanner View — div must be in DOM BEFORE Html5Qrcode is initialised */}
       {scanning && (
         <div style={{
           background: 'var(--surface)',
@@ -446,6 +530,7 @@ export default function ScannerNew({ user, onUserUpdate }) {
               <XCircle size={20} strokeWidth={2} />
             </button>
           </div>
+          {/* ↓ This div must exist in the DOM before Html5Qrcode("barcode-reader") runs */}
           <div id="barcode-reader" style={{ width: '100%' }} />
           <div style={{
             padding: '14px 16px',
