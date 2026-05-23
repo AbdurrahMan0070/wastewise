@@ -1,13 +1,14 @@
 import Map from '../components/Map'
 
-// Simple wrapper — Map handles everything including geolocation and Overpass API
 export default function MapPage() {
   return (
     <div style={{
-      display:       'flex',
-      flexDirection: 'column',
-      height:        '100%',
-      overflow:      'hidden',
+      position: 'fixed',
+      top:    52,
+      left:   0,
+      right:  0,
+      bottom: 62,
+      overflow: 'hidden',
     }}>
       <Map />
     </div>

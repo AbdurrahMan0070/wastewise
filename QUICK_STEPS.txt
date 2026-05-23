@@ -1,0 +1,73 @@
+# ⚡ SUPER QUICK GUIDE - Get Your Link in 10 Minutes
+
+## EASIEST WAY: Use Canva Directly
+
+### Step 1: Go to Canva (2 min)
+1. Open: canva.com
+2. Sign up/Login (free)
+3. Click "Create a design"
+4. Choose "Presentation"
+
+### Step 2: Create 10 Slides (5 min)
+Use `GAMMA_10_SLIDES.txt` as your guide:
+
+**Slide 1:** WasteWise + Your Team Name + Your Names
+**Slide 2:** Problem (2 billion tons waste, 50% in landfills)
+**Slide 3:** Solution (Scan barcode, get instructions)
+**Slide 4:** 6 Features (Scanner, Search, Gamification, Map, Offline, Community)
+**Slide 5:** Zero Cost Scaling (Community-powered)
+**Slide 6:** Technology (React, Supabase, PWA)
+**Slide 7:** Impact (CO₂ tracking, environmental metrics)
+**Slide 8:** Why We Win (vs competitors)
+**Slide 9:** Screenshots + QR code
+**Slide 10:** Try it now + Your Netlify URL
+
+### Step 3: Add Screenshots (2 min)
+Take 6 screenshots of your app:
+- Windows: Win + Shift + S
+- Upload to Canva
+- Add to slides
+
+### Step 4: Get Link (1 min)
+1. Click "Share" (top right)
+2. Click "Link"
+3. Set to "Anyone with the link can view"
+4. Copy link ✅
+
+**Done! Your link:** `https://www.canva.com/design/xxxxx/view`
+
+---
+
+## ALTERNATIVE: Use Google Slides
+
+1. Go to: slides.google.com
+2. Create blank presentation
+3. Add your content
+4. Share → Anyone with link → Viewer
+5. Copy link ✅
+
+**Done! Your link:** `https://docs.google.com/presentation/d/xxxxx/edit`
+
+---
+
+## What You Need to Fill In:
+
+- [ ] Your team name
+- [ ] Your names (both)
+- [ ] Hackathon name
+- [ ] Your Netlify URL: _________________
+- [ ] Your app screenshots (6)
+- [ ] QR code (from qr-code-generator.com)
+
+---
+
+## Test Your Link:
+
+1. Copy link
+2. Open incognito browser
+3. Paste and open
+4. Can you view it? ✅ Good to go!
+
+---
+
+**That's it! Simple and fast!** 🚀
